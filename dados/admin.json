@@ -1,0 +1,17 @@
+{
+    "receitas": [
+        {
+            "data": "2026-02-21",
+            "valor": 30.0,
+            "origem": "Uber"
+        }
+    ],
+    "gastos": [
+        {
+            "data": "2026-02-21",
+            "valor": 5.0,
+            "categoria": "Casa",
+            "tipo": "normal"
+        }
+    ]
+}
