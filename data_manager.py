@@ -4,29 +4,13 @@ import os
 DATA_FILE = "dados.json"
 
 def carregar_dados(usuario):
-    """
-    Retorna os dados do usuário:
-    {
-        "receitas": [...],
-        "gastos": [...]
-    }
-    Inicializa se não existir.
-    """
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            try:
-                all_data = json.load(f)
-                if not isinstance(all_data, dict):
-                    all_data = {}
-            except json.JSONDecodeError:
-                all_data = {}
-    else:
-        all_data = {}
+    with open("dados.json", "r") as f:
+        dados = json.load(f)
 
-    if usuario not in all_data:
-        all_data[usuario] = {"receitas": [], "gastos": []}
+    if usuario not in dados:
+        dados[usuario] = {"receitas": [], "gastos": []}
 
-    return all_data[usuario]
+    return dados[usuario]
 
 def salvar_dados(usuario, dados_usuario):
     """

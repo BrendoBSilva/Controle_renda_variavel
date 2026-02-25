@@ -3,11 +3,28 @@ from datetime import date
 import pandas as pd
 from auth import registrar_usuario, autenticar
 from data_manager import carregar_dados, adicionar_receita, adicionar_gasto, salvar_dados
+from services import resumo_mensal, calcular_score, projetar_fim_do_mes
 
 st.set_page_config(
     page_title="Controle Financeiro",
     layout="centered"
 )
+
+st.set_page_config(
+    page_title="Controle Financeiro",
+    layout="centered",
+    initial_sidebar_state = "collapsed"
+)
+
+st.markdown("""
+    <style>
+    .stMetric {
+        padding: 10px;
+        border-radius: 10px;
+        background-color: #111827;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # ---------------- SESSÃO ----------------
 if "usuario_logado" not in st.session_state:
@@ -45,7 +62,7 @@ st.title("💰 Meu Controle Financeiro")
 menu = st.selectbox(
     "Escolha uma opção",
     [
-        "🏠 Resumo",
+        "🏠 Dashboard",
         "➕ Registrar Ganho",
         "➖ Registrar Gasto",
         "📅 Histórico do Mês",
@@ -57,20 +74,62 @@ menu = st.selectbox(
 dados = carregar_dados(usuario)
 
 # ---------------- RESUMO ----------------
-if menu == "🏠 Resumo":
-    total_receitas = sum(r["valor"] for r in dados["receitas"])
-    total_gastos = sum(g["valor"] for g in dados["gastos"])
-    saldo = total_receitas - total_gastos
+if menu == "🏠 Dashboard":
 
-    st.subheader("Resumo Geral")
+    st.title("📊 Seu Resumo Inteligente do Mês")
 
-    st.metric("💰 Total Recebido", f"R$ {total_receitas:,.2f}")
-    st.metric("💸 Total Gasto", f"R$ {total_gastos:,.2f}")
+    usuario = st.session_state.usuario_logado
+    receitas, gastos, gastos_inesperados = resumo_mensal(usuario)
+    lucro = receitas - gastos
 
-    if saldo >= 0:
-        st.metric("🟢 Saldo Atual", f"R$ {saldo:,.2f}")
+
+    # MÉTRICAS PRINCIPAIS
+    col1, col2, col3 = st.columns(3)
+
+    st.markdown("### 💰 Entrou")
+    st.metric("", f"R$ {receitas:,.2f}")
+
+    st.markdown("### 💸 Saiu")
+    st.metric("", f"R$ {gastos:,.2f}")
+
+    st.markdown("### 🧾 Resultado")
+    st.metric("", f"R$ {lucro:,.2f}")
+
+    st.divider()
+
+
+
+    # META
+    st.markdown("## 🎯 Meta Mensal")
+
+    meta = st.number_input("Defina sua meta", min_value=0.0)
+
+    if meta > 0:
+        progresso = max(min(lucro / meta, 1), 0)
+        st.progress(progresso)
+        st.markdown(f"**{progresso * 100:.0f}% da meta atingida**")
+
+    st.divider()
+
+    # SCORE
+    score, status = calcular_score(receitas, gastos, gastos_inesperados, meta)
+
+    with st.container():
+        st.markdown("## 🧠 Score do Mês")
+        st.metric("Pontuação", f"{score}/100")
+        st.markdown(f"### {status}")
+
+    st.divider()
+
+    # PROJEÇÃO
+    projecao = projetar_fim_do_mes(receitas, gastos)
+
+    st.markdown("## 🔮 Projeção")
+
+    if projecao >= 0:
+        st.success(f"Você pode fechar o mês com R$ {projecao:,.2f}")
     else:
-        st.metric("🔴 Saldo Negativo", f"R$ {abs(saldo):,.2f}")
+        st.error(f"Atenção: projeção negativa de R$ {projecao:,.2f}")
 
 # ---------------- REGISTRAR GANHO ----------------
 elif menu == "➕ Registrar Ganho":
