@@ -1,38 +1,35 @@
-import json
-import os
+from db import conectar
+import hashlib
 
-USUARIOS_FILE = "usuarios.json"
-
-def carregar_usuarios():
-    """Carrega a lista de usuários, corrige se arquivo estiver vazio ou corrompido"""
-    if os.path.exists(USUARIOS_FILE):
-        with open(USUARIOS_FILE, "r") as f:
-            try:
-                usuarios = json.load(f)
-                if not isinstance(usuarios, list):
-                    usuarios = []
-            except json.JSONDecodeError:
-                usuarios = []
-    else:
-        usuarios = []
-    return usuarios
-
-def salvar_usuarios(usuarios):
-    with open(USUARIOS_FILE, "w") as f:
-        json.dump(usuarios, f, indent=4)
+def hash_senha(senha):
+    return hashlib.sha256(senha.encode()).hexdigest()
 
 def registrar_usuario(username, senha):
-    usuarios = carregar_usuarios()
-    for user in usuarios:
-        if user.get("username") == username:
-            return False
-    usuarios.append({"username": username, "senha": senha})
-    salvar_usuarios(usuarios)
-    return True
+    conn = conectar()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            "INSERT INTO usuarios (username, senha) VALUES (?, ?)",
+            (username, hash_senha(senha))
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except:
+        conn.close()
+        return False
 
 def autenticar(username, senha):
-    usuarios = carregar_usuarios()
-    for user in usuarios:
-        if user.get("username") == username and user.get("senha") == senha:
-            return True
-    return False
+    conn = conectar()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT * FROM usuarios WHERE username = ? AND senha = ?",
+        (username, hash_senha(senha))
+    )
+
+    user = cursor.fetchone()
+    conn.close()
+
+    return user is not None

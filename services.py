@@ -1,136 +1,124 @@
-from db import connectar
-import pandas as pd
-from datetime import date, datetime
-from data_manager import carregar_dados
+from db import conectar
+from datetime import date
+import calendar
 
-def registrar_receita(data, valor, origem):
-    conn = connectar()
-    cursor = conn.cursor()
-    cursor.execute(
-        "Insert into receitas (data, valor, origem) values (%s, %s, %s)",
-        (data, valor, origem)
-    )
-    conn.commit()
-    cursor.close()
-
-def registrar_gasto(data, valor, categoria, tipo):
-    conn = connectar()
+def registrar_receita(usuario, data, valor, origem):
+    conn = conectar()
     cursor = conn.cursor()
 
     cursor.execute(
-        "INSERT INTO gastos (data, valor, categoria, tipo) VALUES (%s, %s, %s, %s)",
-        (data, valor, categoria, tipo)
+        "INSERT INTO receita (usuario, data, valor, origem) VALUES (?, ?, ?, ?)",
+        (usuario, str(data), valor, origem)
     )
 
     conn.commit()
-    cursor.close()
     conn.close()
 
+def registrar_gasto(usuario, data, valor, categoria, tipo):
+    conn = conectar()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "INSERT INTO gasto (usuario, data, valor, categoria, tipo) VALUES (?, ?, ?, ?, ?)",
+        (usuario, str(data), valor, categoria, tipo)
+    )
+
+    conn.commit()
+    conn.close()
 
 def resumo_mensal(usuario):
-
-    dados = carregar_dados(usuario)
-
     hoje = date.today()
-    mes_atual = hoje.month
-    ano_atual = hoje.year
+    mes = hoje.month
+    ano = hoje.year
 
-    receitas = 0
-    gastos = 0
-    gastos_inesperados = 0
+    conn = conectar()
+    cursor = conn.cursor()
 
+    cursor.execute("""
+        SELECT SUM(valor) FROM receita
+        WHERE usuario = ? AND strftime('%m', data) = ? AND strftime('%Y', data) = ?
+    """, (usuario, f"{mes:02d}", str(ano)))
+    receitas = cursor.fetchone()[0] or 0
 
-    for r in dados["receitas"]:
-        data_registro = datetime.strptime(r["data"], "%Y-%m-%d")
-        if data_registro.month == mes_atual and data_registro.year == ano_atual:
-            receitas += r["valor"]
+    cursor.execute("""
+        SELECT SUM(valor) FROM gasto
+        WHERE usuario = ? AND strftime('%m', data) = ? AND strftime('%Y', data) = ?
+    """, (usuario, f"{mes:02d}", str(ano)))
+    gastos = cursor.fetchone()[0] or 0
 
+    cursor.execute("""
+        SELECT SUM(valor) FROM gasto
+        WHERE usuario = ? AND tipo = 'inesperado'
+        AND strftime('%m', data) = ? AND strftime('%Y', data) = ?
+    """, (usuario, f"{mes:02d}", str(ano)))
+    gastos_inesperados = cursor.fetchone()[0] or 0
 
-    for g in dados["gastos"]:
-        data_registro = datetime.strptime(g["data"], "%Y-%m-%d")
-        if data_registro.month == mes_atual and data_registro.year == ano_atual:
-            gastos += g["valor"]
-            if g["tipo"] == "inesperado":
-                gastos_inesperados += g["valor"]
+    conn.close()
 
     return receitas, gastos, gastos_inesperados
 
-def comparar_meses():
-    conn = connectar()
+def calcular_score(receitas, gastos, inesperados, meta):
+    lucro = receitas - gastos
 
-    query = """
-    SELECT 
-        YEAR(data) as ano,
-        MONTH(data) as mes,
-        SUM(valor) as total
-    FROM receitas
-    WHERE data >= DATE_SUB(CURRENT_DATE(), INTERVAL 2 MONTH)
-    GROUP BY ano, mes
-    ORDER BY ano, mes;
-    """
+    score = 50
 
-    receitas = pd.read_sql(query, conn)
+    if lucro > 0:
+        score += 20
+    if meta > 0 and lucro >= meta:
+        score += 20
+    if inesperados == 0:
+        score += 10
 
-    query_gastos = """
-    SELECT 
-        YEAR(data) as ano,
-        MONTH(data) as mes,
-        SUM(valor) as total
-    FROM gastos
-    WHERE data >= DATE_SUB(CURRENT_DATE(), INTERVAL 2 MONTH)
-    GROUP BY ano, mes
-    ORDER BY ano, mes;
-    """
+    score = max(0, min(100, score))
 
-    gastos = pd.read_sql(query_gastos, conn)
+    if score >= 80:
+        status = "Excelente 🔥"
+    elif score >= 60:
+        status = "Bom 👍"
+    elif score >= 40:
+        status = "Atenção ⚠️"
+    else:
+        status = "Crítico 🚨"
+
+    return score, status
+
+def projetar_fim_do_mes(receitas, gastos):
+    hoje = date.today()
+    dias_mes = calendar.monthrange(hoje.year, hoje.month)[1]
+    dia_atual = hoje.day
+
+    saldo_atual = receitas - gastos
+
+    if dia_atual == 0:
+        return saldo_atual
+
+    media_diaria = saldo_atual / dia_atual
+    projecao = media_diaria * dias_mes
+
+    return projecao
+
+def buscar_todos_registros(usuario):
+    conn = conectar()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id, data, valor, origem FROM receita WHERE usuario = ?", (usuario,))
+    receitas = cursor.fetchall()
+
+    cursor.execute("SELECT id, data, valor, categoria, tipo FROM gasto WHERE usuario = ?", (usuario,))
+    gastos = cursor.fetchall()
 
     conn.close()
 
     return receitas, gastos
 
-def calcular_score(receitas, gastos, gastos_inesperados, meta):
+def excluir_registro(tipo, registro_id):
+    conn = conectar()
+    cursor = conn.cursor()
 
-    score = 100
-    lucro = receitas - gastos
-
-
-    if lucro < 0:
-        score -= 40
-
-
-    if receitas > 0:
-        perc_inesperado = gastos_inesperados / receitas
-        if perc_inesperado > 0.3:
-            score -= 25
-
-
-    if meta > 0 and lucro < meta * 0.5:
-        score -= 20
-
-
-    if gastos > receitas:
-        score -= 15
-
-    score = max(score, 0)
-
-    
-    if score >= 80:
-        status = "🟢 Estável"
-    elif score >= 50:
-        status = "🟡 Atenção"
+    if tipo == "receita":
+        cursor.execute("DELETE FROM receita WHERE id = ?", (registro_id,))
     else:
-        status = "🔴 Crítico"
+        cursor.execute("DELETE FROM gasto WHERE id = ?", (registro_id,))
 
-    return score, status
-
-def projetar_fim_do_mes(receitas, gastos):
-    hoje = date.today().day
-
-    if hoje == 0:
-        return 0
-
-    lucro_atual = receitas - gastos
-    media_diaria = lucro_atual / hoje
-    projecao = media_diaria * 30
-
-    return projecao
+    conn.commit()
+    conn.close()

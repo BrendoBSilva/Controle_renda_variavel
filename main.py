@@ -1,40 +1,76 @@
 import streamlit as st
-from datetime import date
 import pandas as pd
+from datetime import date
+from db import criar_tabelas
 from auth import registrar_usuario, autenticar
-from data_manager import carregar_dados, adicionar_receita, adicionar_gasto, salvar_dados
-from services import resumo_mensal, calcular_score, projetar_fim_do_mes
-
-st.set_page_config(
-    page_title="Controle Financeiro",
-    layout="centered"
+from services import (
+    registrar_receita,
+    registrar_gasto,
+    resumo_mensal,
+    calcular_score,
+    projetar_fim_do_mes,
+    buscar_todos_registros,
+    excluir_registro
 )
+
+criar_tabelas()
 
 st.set_page_config(
     page_title="Controle Financeiro",
     layout="centered",
-    initial_sidebar_state = "collapsed"
+    initial_sidebar_state="collapsed"
 )
 
+# --------- CSS PREMIUM MOBILE ---------
+
 st.markdown("""
-    <style>
-    .stMetric {
-        padding: 10px;
-        border-radius: 10px;
-        background-color: #111827;
-    }
-    </style>
+<style>
+.block-container {
+    padding-top: 1rem;
+    padding-bottom: 3rem;
+}
+
+.card {
+    background: #111827;
+    padding: 18px;
+    border-radius: 16px;
+    margin-bottom: 15px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.card h3 {
+    margin: 0;
+    font-size: 14px;
+    color: #9CA3AF;
+}
+
+.card h2 {
+    margin: 5px 0 0 0;
+    font-size: 22px;
+}
+
+.success { color: #10B981; }
+.danger { color: #EF4444; }
+.warning { color: #F59E0B; }
+
+.stButton>button {
+    border-radius: 12px;
+    height: 45px;
+    font-weight: 600;
+}
+</style>
 """, unsafe_allow_html=True)
 
-# ---------------- SESSÃO ----------------
+# --------- SESSÃO ---------
+st.title("Controle Financeiro")
 if "usuario_logado" not in st.session_state:
     st.session_state.usuario_logado = None
 
-# ---------------- LOGIN ----------------
+# --------- LOGIN ---------
 if st.session_state.usuario_logado is None:
-    st.title("📱 Controle de Renda")
 
-    aba = st.radio("Acessar", ["Entrar", "Criar Conta"])
+
+    aba = st.radio("", ["Entrar", "Criar Conta"])
 
     username = st.text_input("Usuário")
     senha = st.text_input("Senha", type="password")
@@ -42,7 +78,7 @@ if st.session_state.usuario_logado is None:
     if aba == "Criar Conta":
         if st.button("Criar Conta", use_container_width=True):
             if registrar_usuario(username, senha):
-                st.success("Conta criada!")
+                st.success("Conta criada com sucesso!")
             else:
                 st.error("Usuário já existe.")
     else:
@@ -52,189 +88,152 @@ if st.session_state.usuario_logado is None:
                 st.rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
+
     st.stop()
 
 usuario = st.session_state.usuario_logado
 
-# ---------------- MENU MOBILE ----------------
-st.title("💰 Meu Controle Financeiro")
-
+# --------- MENU MOBILE ---------
 menu = st.selectbox(
-    "Escolha uma opção",
+    "",
     [
         "🏠 Dashboard",
-        "➕ Registrar Ganho",
-        "➖ Registrar Gasto",
-        "📅 Histórico do Mês",
-        "🗑️ Corrigir Registros",
+        "➕ Ganho",
+        "➖ Gasto",
+        "📅 Histórico",
+        "🗑️ Corrigir",
         "⚙️ Conta"
     ]
 )
 
-dados = carregar_dados(usuario)
+# ================= DASHBOARD =================
 
-# ---------------- RESUMO ----------------
 if menu == "🏠 Dashboard":
-
-    st.title("📊 Seu Resumo Inteligente do Mês")
-
-    usuario = st.session_state.usuario_logado
-    receitas, gastos, gastos_inesperados = resumo_mensal(usuario)
+    st.title("💰 Controle Geral")
+    receitas, gastos, inesperados = resumo_mensal(usuario)
     lucro = receitas - gastos
 
+    # CARDS
+    st.markdown(f"""
+    <div class="card">
+        <h3>Entrou</h3>
+        <h2 class="success">R$ {receitas:,.2f}</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # MÉTRICAS PRINCIPAIS
-    col1, col2, col3 = st.columns(3)
+    st.markdown(f"""
+    <div class="card">
+        <h3>Saiu</h3>
+        <h2 class="danger">R$ {gastos:,.2f}</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.markdown("### 💰 Entrou")
-    st.metric("", f"R$ {receitas:,.2f}")
+    cor = "success" if lucro >= 0 else "danger"
 
-    st.markdown("### 💸 Saiu")
-    st.metric("", f"R$ {gastos:,.2f}")
-
-    st.markdown("### 🧾 Resultado")
-    st.metric("", f"R$ {lucro:,.2f}")
-
-    st.divider()
-
-
+    st.markdown(f"""
+    <div class="card">
+        <h3>Resultado</h3>
+        <h2 class="{cor}">R$ {lucro:,.2f}</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
     # META
-    st.markdown("## 🎯 Meta Mensal")
-
-    meta = st.number_input("Defina sua meta", min_value=0.0)
+    meta = st.number_input("Meta do mês", min_value=0.0)
 
     if meta > 0:
         progresso = max(min(lucro / meta, 1), 0)
         st.progress(progresso)
-        st.markdown(f"**{progresso * 100:.0f}% da meta atingida**")
-
-    st.divider()
+        st.caption(f"{progresso * 100:.0f}% da meta")
 
     # SCORE
-    score, status = calcular_score(receitas, gastos, gastos_inesperados, meta)
+    score, status = calcular_score(receitas, gastos, inesperados, meta)
 
-    with st.container():
-        st.markdown("## 🧠 Score do Mês")
-        st.metric("Pontuação", f"{score}/100")
-        st.markdown(f"### {status}")
-
-    st.divider()
+    st.markdown(f"""
+    <div class="card">
+        <h3>Score do Mês</h3>
+        <h2>{score}/100</h2>
+        <p>{status}</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     # PROJEÇÃO
     projecao = projetar_fim_do_mes(receitas, gastos)
 
-    st.markdown("## 🔮 Projeção")
+    cor_proj = "success" if projecao >= 0 else "danger"
 
-    if projecao >= 0:
-        st.success(f"Você pode fechar o mês com R$ {projecao:,.2f}")
-    else:
-        st.error(f"Atenção: projeção negativa de R$ {projecao:,.2f}")
+    st.markdown(f"""
+    <div class="card">
+        <h3>Projeção Final</h3>
+        <h2 class="{cor_proj}">R$ {projecao:,.2f}</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
-# ---------------- REGISTRAR GANHO ----------------
-elif menu == "➕ Registrar Ganho":
+# ================= GANHO =================
+elif menu == "➕ Ganho":
     st.subheader("Novo Ganho")
 
-    valor = st.number_input("Valor recebido", min_value=0.0)
-    origem = st.text_input("Origem (opcional)")
+    valor = st.number_input("Valor", min_value=0.0)
+    origem = st.text_input("Origem")
     data_input = st.date_input("Data", value=date.today())
 
-    if st.button("Salvar Ganho", use_container_width=True):
-        adicionar_receita(usuario, {
-            "data": str(data_input),
-            "valor": valor,
-            "origem": origem
-        })
+    if st.button("Salvar", use_container_width=True):
+        registrar_receita(usuario, data_input, valor, origem)
         st.success("Ganho registrado!")
 
-# ---------------- REGISTRAR GASTO ----------------
-elif menu == "➖ Registrar Gasto":
+# ================= GASTO =================
+elif menu == "➖ Gasto":
     st.subheader("Novo Gasto")
 
-    valor = st.number_input("Valor gasto", min_value=0.0)
-    categoria = st.selectbox(
-        "Categoria",
+    valor = st.number_input("Valor", min_value=0.0)
+    categoria = st.selectbox("Categoria",
         ["Casa", "Transporte", "Alimentação", "Trabalho", "Emergência"]
     )
     tipo = st.radio("Tipo", ["normal", "inesperado"])
     data_input = st.date_input("Data", value=date.today())
 
-    if st.button("Salvar Gasto", use_container_width=True):
-        adicionar_gasto(usuario, {
-            "data": str(data_input),
-            "valor": valor,
-            "categoria": categoria,
-            "tipo": tipo
-        })
+    if st.button("Salvar", use_container_width=True):
+        registrar_gasto(usuario, data_input, valor, categoria, tipo)
         st.success("Gasto registrado!")
 
-# ---------------- HISTÓRICO DO MÊS ----------------
-elif menu == "📅 Histórico do Mês":
-    st.subheader("Resumo Mensal")
+# ================= HISTÓRICO =================
+elif menu == "📅 Histórico":
+    receitas_db, gastos_db = buscar_todos_registros(usuario)
 
-    df_receitas = pd.DataFrame(dados['receitas'])
-    df_gastos = pd.DataFrame(dados['gastos'])
+    df_receitas = pd.DataFrame(receitas_db, columns=["id","data","valor","origem"])
+    df_gastos = pd.DataFrame(gastos_db, columns=["id","data","valor","categoria","tipo"])
 
     if df_receitas.empty and df_gastos.empty:
-        st.info("Nenhum dado registrado ainda.")
+        st.info("Sem registros.")
         st.stop()
 
     if not df_receitas.empty:
-        df_receitas['data'] = pd.to_datetime(df_receitas['data'])
-        df_receitas['tipo'] = 'Receita'
+        df_receitas["data"] = pd.to_datetime(df_receitas["data"])
+        df_receitas["tipo"] = "Receita"
 
     if not df_gastos.empty:
-        df_gastos['data'] = pd.to_datetime(df_gastos['data'])
-        df_gastos['tipo'] = 'Gasto'
+        df_gastos["data"] = pd.to_datetime(df_gastos["data"])
+        df_gastos["tipo"] = "Gasto"
 
     df = pd.concat([df_receitas, df_gastos], ignore_index=True)
 
-    meses = df['data'].dt.to_period('M').astype(str).unique()
-    mes_selecionado = st.selectbox("Escolha o mês", sorted(meses, reverse=True))
+    st.bar_chart(df.groupby("tipo")["valor"].sum())
+    st.dataframe(df.sort_values("data", ascending=False), use_container_width=True)
 
-    ano, mes = map(int, mes_selecionado.split('-'))
-    df_mes = df[(df['data'].dt.month == mes) & (df['data'].dt.year == ano)]
+# ================= CORRIGIR =================
+elif menu == "🗑️ Corrigir":
+    receitas_db, gastos_db = buscar_todos_registros(usuario)
 
-    df_pivot = df_mes.pivot_table(
-        index='data',
-        columns='tipo',
-        values='valor',
-        aggfunc='sum'
-    ).fillna(0)
-
-    st.bar_chart(df_pivot)
-
-    st.markdown("### 📜 Registros do mês")
-    st.dataframe(df_mes.sort_values('data', ascending=False), use_container_width=True)
-
-# ---------------- CORRIGIR REGISTROS ----------------
-elif menu == "🗑️ Corrigir Registros":
-    st.subheader("Apagar Registros")
-
-    for tipo in ["receita", "gasto"]:
-        lista = dados[tipo + "s"]
-        if not lista:
-            continue
-
-        st.markdown(f"### {tipo.capitalize()}s")
-
-        for i, item in enumerate(lista):
-            descricao = f"{item['data']} - R$ {item['valor']:.2f}"
-            if tipo == "gasto":
-                descricao += f" - {item.get('categoria','')}"
-            else:
-                descricao += f" - {item.get('origem','')}"
-
-            if st.checkbox(descricao, key=f"{tipo}_{i}"):
-                lista[i]["apagar"] = True
-
-        if st.button(f"Confirmar exclusão de {tipo}s", use_container_width=True):
-            dados[tipo + "s"] = [r for r in lista if not r.get("apagar", False)]
-            salvar_dados(usuario, dados)
-            st.success("Registros atualizados!")
+    for r in receitas_db:
+        if st.button(f"Excluir Receita {r[1]} - R${r[2]}"):
+            excluir_registro("receita", r[0])
             st.rerun()
 
-# ---------------- CONTA ----------------
+    for g in gastos_db:
+        if st.button(f"Excluir Gasto {g[1]} - R${g[2]}"):
+            excluir_registro("gasto", g[0])
+            st.rerun()
+
+# ================= CONTA =================
 elif menu == "⚙️ Conta":
     st.write(f"Usuário: {usuario}")
     if st.button("Sair", use_container_width=True):
