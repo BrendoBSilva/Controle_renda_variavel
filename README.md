@@ -1,4 +1,4 @@
-# 📱 Controle de Renda Variável — Aplicação Mobile-First com Streamlit
+# 📱 Controle de Renda Variável — Aplicação Mobile-First com Streamlit V3
 
 Aplicação web desenvolvida em SQL e Python utilizando Streamlit para gerenciamento de renda variável e gastos imprevisíveis.
 
@@ -173,6 +173,9 @@ Instale as dependências:
 pip install -r requirements.txt
 
 🌍 Deploy realizado no Streamlit cloud
+
+Atualização 1 - Inserção de meta do mês, score e projeção final
+Atualização 2 - Migração para sqlite3 
 
 👨‍💻 Autor
 
