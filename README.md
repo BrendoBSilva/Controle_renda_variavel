@@ -177,6 +177,11 @@ pip install -r requirements.txt
 Atualização 1 - Inserção de meta do mês, score e projeção final
 Atualização 2 - Migração para sqlite3, e exclusão do JSON para melhora de performance (cadastro persiste).
 
+
+<img width="478" height="774" alt="Streamlit e mais 5 páginas - Perfil 1 — Microsoft​ Edge 25_02_2026 20_55_04" src="https://github.com/user-attachments/assets/126b3096-782b-4042-87be-752424b59a4e" />
+
+
+
 👨‍💻 Autor
 
 Brendo Barbosa Silva
