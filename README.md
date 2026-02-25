@@ -175,7 +175,7 @@ pip install -r requirements.txt
 🌍 Deploy realizado no Streamlit cloud
 
 Atualização 1 - Inserção de meta do mês, score e projeção final
-Atualização 2 - Migração para sqlite3 
+Atualização 2 - Migração para sqlite3, e exclusão do JSON para melhora de performance (cadastro persiste).
 
 👨‍💻 Autor
 
